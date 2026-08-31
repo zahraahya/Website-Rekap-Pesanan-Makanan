@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RekapPesanan - Otomatisasi Makanan</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['"Plus Jakarta Sans"', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            400: '#38bdf8',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            900: '#0c4a6e',
+                        },
+                        accent: {
+                            500: '#8b5cf6', // Purple for gradient
+                            600: '#7c3aed',
+                        }
+                    },
+                    animation: {
+                        'blob': 'blob 7s infinite',
+                    },
+                    keyframes: {
+                        blob: {
+                            '0%': { transform: 'translate(0px, 0px) scale(1)' },
+                            '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
+                            '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
+                            '100%': { transform: 'translate(0px, 0px) scale(1)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { 
+            background-color: #f8fafc; 
+            /* Subtle mesh gradient background */
+            background-image: 
+                radial-gradient(at 40% 20%, hsla(228,100%,74%,0.15) 0px, transparent 50%),
+                radial-gradient(at 80% 0%, hsla(189,100%,56%,0.15) 0px, transparent 50%),
+                radial-gradient(at 0% 50%, hsla(355,100%,93%,0.1) 0px, transparent 50%);
+            background-attachment: fixed;
+        }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+
+        .fade-in-up { animation: fadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .drag-active {
+            border-color: #0ea5e9 !important;
+            background-color: rgba(14, 165, 233, 0.05) !important;
+            transform: scale(1.02);
+        }
+
+        /* Tabs transition */
+        .tab-content { display: none; opacity: 0; transition: opacity 0.3s ease; }
+        .tab-content.active { display: flex; opacity: 1; }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="text-slate-800 min-h-screen flex flex-col overflow-x-hidden relative">
+
+    <!-- Background Animated Blobs -->
+    <div class="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div class="absolute top-0 -left-4 w-72 h-72 bg-purple-300 rounded-full mix-blend-multiply filter blur-2xl opacity-30 animate-blob"></div>
+        <div class="absolute top-0 -right-4 w-72 h-72 bg-cyan-300 rounded-full mix-blend-multiply filter blur-2xl opacity-30 animate-blob animation-delay-2000"></div>
+        <div class="absolute -bottom-8 left-20 w-72 h-72 bg-blue-300 rounded-full mix-blend-multiply filter blur-2xl opacity-30 animate-blob animation-delay-4000"></div>
+    </div>
+
+    <nav class="glass-panel sticky top-0 z-40 border-b border-slate-200/50 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center space-x-3 cursor-pointer" onclick="switchTab('upload')">
+                    <div class="bg-gradient-to-tr from-brand-600 to-brand-400 text-white p-2 rounded-xl shadow-md shadow-brand-500/20">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-extrabold text-slate-900 leading-tight tracking-tight">RekapPesanan</h1>
+                        <p class="text-[10px] text-brand-600 font-bold uppercase tracking-wider">Otomatisasi PDF</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center space-x-2">
+                    <!-- Tab Switchers -->
+                    <button onclick="switchTab('upload')" id="tab-btn-upload" class="px-4 py-2 text-sm font-semibold rounded-lg bg-slate-100 text-slate-800 transition-colors">
+                        Upload Baru
+                    </button>
+                    <button onclick="switchTab('history')" id="tab-btn-history" class="px-4 py-2 text-sm font-semibold rounded-lg text-slate-500 hover:bg-slate-100 transition-colors flex items-center gap-1">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        Riwayat
+                    </button>
+                    
+                    <!-- Copy Button (Hidden by default in nav) -->
+                    <button id="btn-copy-nav" class="hidden items-center space-x-2 bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-white px-4 py-2 rounded-lg font-medium transition-all duration-300 text-sm shadow-md shadow-slate-900/20 transform hover:-translate-y-0.5 ml-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                        <span class="hidden sm:inline">Salin WA</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full z-10">
+        
+        <div id="tab-upload" class="tab-content active flex-col gap-8">
+            <!-- Welcome / Upload Section -->
+            <div id="upload-section" class="glass-panel rounded-3xl p-8 md:p-12 shadow-lg shadow-brand-500/5 border-white/60 text-center relative overflow-hidden transition-all duration-500">
+                <div class="relative z-10 max-w-2xl mx-auto">
+                    <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-50 text-brand-600 text-sm font-bold mb-6 border border-brand-100">
+                        <span class="relative flex h-2 w-2">
+                          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-400 opacity-75"></span>
+                          <span class="relative inline-flex rounded-full h-2 w-2 bg-brand-500"></span>
+                        </span>
+                        Sistem Siap Digunakan
+                    </div>
+                    <h2 class="text-3xl md:text-5xl font-extrabold text-slate-900 mb-4 tracking-tight">Ekstrak PDF <span class="text-transparent bg-clip-text bg-gradient-to-r from-brand-600 to-accent-600">Instan</span></h2>
+                    <p class="text-slate-500 mb-8 text-lg font-medium leading-relaxed">Sistem pintar kami membaca hasil Google Forms dan merekap otomatis pesanan per kelompok tanpa repot.</p>
+                    
+                    <!-- Dropzone -->
+                    <div id="dropzone" class="border-2 border-dashed border-slate-300 rounded-2xl p-10 cursor-pointer hover:border-brand-500 bg-white/50 hover:bg-white transition-all duration-300 group shadow-sm">
+                        <input type="file" id="file-input" class="hidden" accept=".pdf" />
+                        
+                        <div id="dropzone-content" class="flex flex-col items-center justify-center space-y-4">
+                            <div class="w-20 h-20 bg-gradient-to-br from-brand-50 to-white rounded-full shadow-md flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 border border-brand-100">
+                                <svg class="w-10 h-10 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+                            </div>
+                            <div>
+                                <p class="text-xl font-bold text-slate-800">Pilih atau seret file PDF</p>
+                                <p class="text-sm text-slate-500 mt-1 font-medium">Hanya mendukung file .pdf dari Google Forms</p>
+                            </div>
+                        </div>
+
+                        <!-- Loading State -->
+                        <div id="loading-state" class="hidden flex-col items-center justify-center space-y-4 py-6">
+                            <div class="relative">
+                                <div class="w-12 h-12 rounded-full border-4 border-brand-100"></div>
+                                <div class="w-12 h-12 rounded-full border-4 border-brand-500 border-t-transparent animate-spin absolute top-0 left-0"></div>
+                            </div>
+                            <p class="text-slate-600 font-bold animate-pulse">Sihir sedang bekerja merapikan datamu...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results Section (Hidden initially) -->
+            <div id="results-section" class="hidden flex-col gap-6 w-full">
+                <div class="glass-panel p-6 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-2xl font-extrabold text-slate-900 flex items-center gap-2">
+                            🎉 Rekap Selesai!
+                        </h2>
+                        <p class="text-slate-500 text-sm mt-1 font-medium">Ditemukan data untuk <span id="total-groups" class="font-bold text-brand-600 text-base">0</span> kelompok <span id="result-filename" class="text-slate-400 text-xs ml-2"></span></p>
+                    </div>
+                    <div class="flex gap-3">
+                        <button onclick="resetApp()" class="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-sm font-bold transition-colors shadow-sm">
+                            Upload Lain
+                        </button>
+                        <button onclick="copyToClipboard()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-sm font-bold transition-colors shadow-md shadow-brand-500/30 flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+                            Salin Format WA
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Grid Kartu Kelompok -->
+                <div id="cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <!-- Cards will be generated here -->
+                </div>
+            </div>
+        </div>
+
+        <div id="tab-history" class="tab-content flex-col gap-6">
+            <div class="glass-panel p-6 rounded-2xl flex items-center justify-between">
+                <div>
+                    <h2 class="text-2xl font-extrabold text-slate-900">Riwayat Rekapitulasi</h2>
+                    <p class="text-slate-500 text-sm mt-1 font-medium">Data yang pernah kamu proses tersimpan di browser ini.</p>
+                </div>
+                <button onclick="clearAllHistory()" class="text-red-500 hover:text-red-700 text-sm font-bold px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors">
+                    Hapus Semua
+                </button>
+            </div>
+
+            <div id="history-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- History items will be generated here -->
+                <div class="col-span-full text-center py-12 text-slate-400 hidden" id="empty-history">
+                    <svg class="w-16 h-16 mx-auto mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path></svg>
+                    <p class="font-medium text-lg">Belum ada riwayat rekap.</p>
+                    <p class="text-sm">Upload file PDF untuk mulai merekap.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 right-5 transform translate-y-24 opacity-0 transition-all duration-300 bg-slate-900 text-white px-6 py-4 rounded-xl shadow-2xl flex items-center space-x-3 z-50 font-medium">
+        <div id="toast-icon-container" class="bg-green-500/20 text-green-400 rounded-full p-1">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+        </div>
+        <span id="toast-message" class="text-sm">Berhasil disalin!</span>
+    </div>
+
+    <script>
+        // DOM Elements
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('file-input');
+        const dropzoneContent = document.getElementById('dropzone-content');
+        const loadingState = document.getElementById('loading-state');
+        const resultsSection = document.getElementById('results-section');
+        const cardsContainer = document.getElementById('cards-container');
+        const totalGroupsEl = document.getElementById('total-groups');
+        const resultFilenameEl = document.getElementById('result-filename');
+        const btnCopyNav = document.getElementById('btn-copy-nav');
+        const toast = document.getElementById('toast');
+        const toastMessage = document.getElementById('toast-message');
+        const toastIcon = document.getElementById('toast-icon-container');
+        
+        // History Elements
+        const historyContainer = document.getElementById('history-container');
+        const emptyHistoryMsg = document.getElementById('empty-history');
+
+        // State Variabel
+        let rawWaText = "";
+        let currentRecapData = null;
+        let currentFilename = "";
+
+        // Inisialisasi Aplikasi
+        document.addEventListener('DOMContentLoaded', () => {
+            renderHistoryList();
+        });
+
+        function switchTab(tabName) {
+            // Update buttons styling
+            const btnUpload = document.getElementById('tab-btn-upload');
+            const btnHistory = document.getElementById('tab-btn-history');
+            
+            if (tabName === 'upload') {
+                btnUpload.className = "px-4 py-2 text-sm font-semibold rounded-lg bg-slate-100 text-slate-800 transition-colors";
+                btnHistory.className = "px-4 py-2 text-sm font-semibold rounded-lg text-slate-500 hover:bg-slate-100 transition-colors flex items-center gap-1";
+                
+                document.getElementById('tab-upload').classList.add('active');
+                document.getElementById('tab-history').classList.remove('active');
+                
+                // Show nav copy button only if results are visible in upload tab
+                if(!resultsSection.classList.contains('hidden')) {
+                    btnCopyNav.classList.remove('hidden');
+                    btnCopyNav.classList.add('flex');
+                }
+            } else {
+                btnUpload.className = "px-4 py-2 text-sm font-semibold rounded-lg text-slate-500 hover:bg-slate-100 transition-colors";
+                btnHistory.className = "px-4 py-2 text-sm font-semibold rounded-lg bg-slate-100 text-slate-800 transition-colors flex items-center gap-1";
+                
+                document.getElementById('tab-upload').classList.remove('active');
+                document.getElementById('tab-history').classList.add('active');
+                
+                // Hide copy button in history tab
+                btnCopyNav.classList.add('hidden');
+                btnCopyNav.classList.remove('flex');
+                
+                renderHistoryList(); // Refresh list just in case
+            }
+        }
+
+        dropzone.addEventListener('click', () => fileInput.click());
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('drag-active');
+        });
+        dropzone.addEventListener('dragleave', () => {
+            dropzone.classList.remove('drag-active');
+        });
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('drag-active');
+            if (e.dataTransfer.files.length) {
+                processFile(e.dataTransfer.files[0]);
+            }
+        });
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                processFile(e.target.files[0]);
+            }
+        });
+        btnCopyNav.addEventListener('click', copyToClipboard);
+
+        function processFile(file) {
+            if (file.type !== "application/pdf") {
+                showToast("Mohon unggah file PDF yang valid.", false);
+                return;
+            }
+
+            currentFilename = file.name;
+
+            // UI State: Loading
+            dropzoneContent.classList.add('hidden');
+            loadingState.classList.remove('hidden');
+            dropzone.classList.remove('cursor-pointer', 'hover:border-brand-500', 'hover:bg-white');
+            dropzone.style.pointerEvents = 'none';
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const typedarray = new Uint8Array(e.target.result);
+                try {
+                    await extractAndParseData(typedarray);
+                } catch (error) {
+                    console.error("PDF Parse Error:", error);
+                    showToast("Gagal membaca isi PDF.", false);
+                    resetApp();
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        async function extractAndParseData(data) {
+            const pdf = await pdfjsLib.getDocument({data: data}).promise;
+            let fullText = "";
+            
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const content = await page.getTextContent();
+                const pageText = content.items.map(item => item.str).join(' ');
+                fullText += pageText + " ";
+            }
+
+            fullText = fullText.replace(/\s+/g, ' ');
+
+            const splitRegex = /(?=\b\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}:\d{2}\b)/;
+            const rawRecords = fullText.split(splitRegex);
+            const records = rawRecords.filter(r => /^\b\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}:\d{2}\b/.test(r.trim()));
+            
+            const recap = {};
+
+            records.forEach(record => {
+                const str = record.trim();
+                const menuRegex = /Nasi (Ayam Geprek|Ayam Teriyaki|Sosis Asam Manis)/g;
+                let menus = [];
+                let match;
+                while ((match = menuRegex.exec(str)) !== null) {
+                    menus.push({ name: match[1], index: match.index });
+                }
+
+                if (menus.length > 0) {
+                    const firstMenuIndex = menus[0].index;
+                    const preText = str.substring(0, firstMenuIndex).trim();
+                    const kelompokMatch = preText.match(/(\d+)$/);
+                    
+                    if (kelompokMatch) {
+                        const kel = parseInt(kelompokMatch[1], 10);
+                        if (!recap[kel]) {
+                            recap[kel] = { geprek: 0, teriyaki: 0, sosis: 0, esteh: 0 };
+                        }
+
+                        menus.forEach(m => {
+                            if (m.name === 'Ayam Geprek') recap[kel].geprek++;
+                            if (m.name === 'Ayam Teriyaki') recap[kel].teriyaki++;
+                            if (m.name === 'Sosis Asam Manis') recap[kel].sosis++;
+                        });
+
+                        const iyaMatches = str.match(/\bIya\b/g);
+                        if (iyaMatches) {
+                            recap[kel].esteh += iyaMatches.length;
+                        }
+                    }
+                }
+            });
+
+            const kelompokKeys = Object.keys(recap).map(Number).sort((a, b) => a - b);
+            
+            if (kelompokKeys.length === 0) {
+                showToast("Tidak ditemukan data pesanan valid.", false);
+                resetApp();
+                return;
+            }
+
+            // Save to state & LocalStorage
+            currentRecapData = recap;
+            saveToHistory(recap, currentFilename);
+            
+            // Render
+            renderResults(recap, currentFilename);
+        }
+
+        function renderResults(recap, filename = "", isFromHistory = false) {
+            const kelompokKeys = Object.keys(recap).map(Number).sort((a, b) => a - b);
+            
+            // Update Text WA Format state
+            rawWaText = generateWaText(recap, kelompokKeys);
+
+            // Update UI State
+            totalGroupsEl.textContent = kelompokKeys.length;
+            resultFilenameEl.textContent = filename ? `(dari file: ${filename})` : '';
+            cardsContainer.innerHTML = '';
+            
+            document.getElementById('upload-section').classList.add('hidden');
+            resultsSection.classList.remove('hidden');
+            
+            // Tampilkan tombol navigasi hanya jika kita di tab upload
+            if(document.getElementById('tab-upload').classList.contains('active')) {
+                btnCopyNav.classList.remove('hidden');
+                btnCopyNav.classList.add('flex');
+            }
+
+            kelompokKeys.forEach((kel, index) => {
+                const data = recap[kel];
+                const delay = index * 40; 
+                
+                const card = document.createElement('div');
+                card.className = `glass-panel bg-white/80 rounded-2xl p-6 shadow-sm border border-white fade-in-up hover:shadow-lg hover:border-brand-100 transition-all duration-300 transform hover:-translate-y-1`;
+                card.style.animationDelay = `${delay}ms`;
+                
+                card.innerHTML = `
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+                        <div class="flex items-center gap-2">
+                            <div class="w-8 h-8 rounded-full bg-brand-100 text-brand-600 flex items-center justify-center font-extrabold text-sm">
+                                ${kel}
+                            </div>
+                            <h3 class="font-bold text-lg text-slate-900">Kelompok</h3>
+                        </div>
+                        <span class="bg-gradient-to-r from-brand-500 to-brand-600 text-white text-[11px] font-bold px-3 py-1 rounded-full shadow-sm">
+                            ${data.geprek + data.teriyaki + data.sosis} Porsi
+                        </span>
+                    </div>
+                    <div class="space-y-3 text-sm">
+                        ${renderRow('Ayam Geprek', data.geprek, '🍗')}
+                        ${renderRow('Ayam Teriyaki', data.teriyaki, '🍱')}
+                        ${renderRow('Sosis Asam Manis', data.sosis, '🌭')}
+                        <div class="border-t border-dashed border-slate-200 pt-3 mt-3">
+                            ${renderRow('Es Teh Manis', data.esteh, '🥤', true)}
+                        </div>
+                    </div>
+                `;
+                cardsContainer.appendChild(card);
+            });
+
+            // Jika dipanggil dari history, pastikan kita di tab upload
+            if (isFromHistory) {
+                switchTab('upload');
+            }
+        }
+
+        function renderRow(menu, count, icon, isDrink = false) {
+            const displayCount = count === 0 ? '-' : count;
+            const textStyle = count === 0 ? 'text-slate-400' : 'text-slate-700 font-bold';
+            const badgeBg = count === 0 ? 'bg-slate-100 text-slate-400' : (isDrink ? 'bg-cyan-100 text-cyan-700' : 'bg-brand-100 text-brand-700');
+            const grayscale = count === 0 ? 'grayscale opacity-50' : '';
+            
+            return `
+                <div class="flex justify-between items-center group">
+                    <div class="flex items-center gap-2">
+                        <span class="text-lg ${grayscale}">${icon}</span>
+                        <span class="${textStyle}">${menu}</span>
+                    </div>
+                    <span class="${badgeBg} px-2.5 py-1 rounded-lg text-xs font-extrabold min-w-[2rem] text-center shadow-sm group-hover:scale-110 transition-transform">
+                        ${displayCount}
+                    </span>
+                </div>
+            `;
+        }
+
+        function generateWaText(recap, kelompokKeys) {
+            let text = "*Rekap Pesanan Makan Siang*\n\n";
+            kelompokKeys.forEach((kel, idx) => {
+                const data = recap[kel];
+                const formatNum = (num) => num === 0 ? '-' : num;
+                
+                text += `*Kelompok ${kel}:*\n`;
+                text += `🍗 Nasi Ayam Geprek     : ${formatNum(data.geprek)}\n`;
+                text += `🍱 Nasi Ayam Teriyaki   : ${formatNum(data.teriyaki)}\n`;
+                text += `🌭 Nasi Sosis A. Manis  : ${formatNum(data.sosis)}\n`;
+                text += `🥤 Es Teh               : ${formatNum(data.esteh)}\n`;
+                
+                if (idx < kelompokKeys.length - 1) text += "\n";
+            });
+            text += "\n_Di-generate otomatis oleh RekapPesanan_";
+            return text;
+        }
+
+        function getHistory() {
+            const hist = localStorage.getItem('rekapHistory');
+            return hist ? JSON.parse(hist) : [];
+        }
+
+        function saveToHistory(recapData, filename) {
+            const history = getHistory();
+            const date = new Date();
+            
+            // Buat ID unik berdasarkan waktu
+            const newItem = {
+                id: Date.now().toString(),
+                filename: filename || 'Upload Tanpa Nama',
+                date: date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit' }),
+                data: recapData,
+                totalGroups: Object.keys(recapData).length
+            };
+
+            // Tambahkan di awal array
+            history.unshift(newItem);
+            
+            // Simpan max 10 riwayat agar tidak memberatkan browser
+            if (history.length > 10) history.pop();
+            
+            localStorage.setItem('rekapHistory', JSON.stringify(history));
+        }
+
+        function renderHistoryList() {
+            const history = getHistory();
+            historyContainer.innerHTML = '';
+            
+            if (history.length === 0) {
+                emptyHistoryMsg.classList.remove('hidden');
+                return;
+            } else {
+                emptyHistoryMsg.classList.add('hidden');
+            }
+
+            history.forEach((item, index) => {
+                const delay = index * 50;
+                const card = document.createElement('div');
+                card.className = `glass-panel bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col justify-between h-full fade-in-up hover:shadow-md transition-all`;
+                card.style.animationDelay = `${delay}ms`;
+                
+                card.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-start mb-3">
+                            <div class="bg-brand-50 p-2 rounded-lg text-brand-600">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            </div>
+                            <span class="text-xs font-semibold text-slate-400 bg-slate-100 px-2 py-1 rounded-full">${item.date}</span>
+                        </div>
+                        <h4 class="font-bold text-slate-800 text-sm mb-1 truncate" title="${item.filename}">${item.filename}</h4>
+                        <p class="text-xs text-slate-500 font-medium">${item.totalGroups} Kelompok direkap</p>
+                    </div>
+                    <div class="flex gap-2 mt-4 pt-4 border-t border-slate-100">
+                        <button onclick="viewHistoryItem('${item.id}')" class="flex-1 bg-brand-50 hover:bg-brand-100 text-brand-700 py-2 rounded-lg text-xs font-bold transition-colors">
+                            Lihat Hasil
+                        </button>
+                        <button onclick="deleteHistoryItem('${item.id}')" class="p-2 bg-red-50 hover:bg-red-100 text-red-500 rounded-lg transition-colors" title="Hapus Riwayat">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    </div>
+                `;
+                historyContainer.appendChild(card);
+            });
+        }
+
+        function viewHistoryItem(id) {
+            const history = getHistory();
+            const item = history.find(h => h.id === id);
+            if (item) {
+                renderResults(item.data, item.filename, true);
+            }
+        }
+
+        function deleteHistoryItem(id) {
+            if(confirm('Hapus riwayat ini?')) {
+                let history = getHistory();
+                history = history.filter(h => h.id !== id);
+                localStorage.setItem('rekapHistory', JSON.stringify(history));
+                renderHistoryList();
+            }
+        }
+
+        function clearAllHistory() {
+            if(confirm('Hapus semua riwayat rekap? Tindakan ini tidak bisa dibatalkan.')) {
+                localStorage.removeItem('rekapHistory');
+                renderHistoryList();
+                showToast("Semua riwayat dihapus", true);
+            }
+        }
+
+        function resetApp() {
+            fileInput.value = '';
+            document.getElementById('upload-section').classList.remove('hidden');
+            resultsSection.classList.add('hidden');
+            btnCopyNav.classList.add('hidden');
+            btnCopyNav.classList.remove('flex');
+            
+            dropzoneContent.classList.remove('hidden');
+            loadingState.classList.add('hidden');
+            dropzone.classList.add('cursor-pointer', 'hover:border-brand-500', 'hover:bg-white');
+            dropzone.style.pointerEvents = 'auto';
+        }
+
+        function copyToClipboard() {
+            const textArea = document.createElement("textarea");
+            textArea.value = rawWaText;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-9999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                document.execCommand('copy');
+                showToast("Format WA disalin!", true);
+            } catch (err) {
+                console.error('Gagal menyalin', err);
+                showToast("Gagal menyalin teks.", false);
+            }
+            
+            document.body.removeChild(textArea);
+        }
+
+        let toastTimeout;
+        function showToast(msg, isSuccess = true) {
+            toastMessage.textContent = msg;
+            
+            if (isSuccess) {
+                toastIcon.className = 'bg-green-500/20 text-green-400 rounded-full p-1.5';
+                toastIcon.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
+            } else {
+                toastIcon.className = 'bg-red-500/20 text-red-400 rounded-full p-1.5';
+                toastIcon.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>';
+            }
+
+            toast.classList.remove('translate-y-24', 'opacity-0');
+            
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.add('translate-y-24', 'opacity-0');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
